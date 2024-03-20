@@ -2,63 +2,23 @@ from flask import Flask, render_template, jsonify, request
 import random
 from typing import List
 import numpy as np
-from scipy.optimize import minimize
+
+import json
+
 
 app = Flask(__name__)
 
-# Votre route principale
-@app.route('/')
-def home():
-    return render_template('accueil.html')
-
-@app.route('/index.html')
-def index():
-    # Ajoutez ici le code pour préparer les données nécessaires à la page index.html
-    return render_template('index.html')
-    
-
-    # Route pour lancer l'algorithme
-@app.route('/run-algorithm/<algorithme>', methods=['GET'])
-def run_algorithm(algorithme):
-    # Récupérer les paramètres depuis la requête
-    nombre_objets = int(request.args.get('nombreObjets', 0))
-    capacite_bin = int(request.args.get('capaciteBin', 0))
-    dimensions_objets = list(map(int, request.args.get('dimensionsObjets', '').split(',')))
-
-    # Assurez-vous d'ajuster les paramètres selon vos besoins
-    parametres = {
-        'nombre_objets': nombre_objets,
-        'capacite_bin': capacite_bin,
-        'dimensions_objets': dimensions_objets
-    }
-    taille_population = 200
-    taux_mutation = 0.5
-    nombre_generations = 200
-
-    nombre_loups = 5
-    nombre_iterations = 100
-
-    if algorithme == 'genetique':
-        # Appeler l'algorithme génétique avec les paramètres
-        meilleure_solution_genetique, nombre_boites_utilisees_genetique = algorithme_genetique(objets, capacite_bin, taille_population, taux_mutation, nombre_generations)
-        return jsonify(meilleure_solution_genetique, nombre_boites_utilisees_genetique)
-
-    elif algorithme == 'loupsgris':
-        # Appeler l'algorithme des loups gris avec les paramètres
-        meilleure_solution_loups, nombre_boites_utilisees_loups = algorithme_loups(objets, capacite_bin, nombre_loups, nombre_iterations)
-        return jsonify(meilleure_solution_loups, nombre_boites_utilisees_loups)
-
-    else:
-        # Gérer le cas où un algorithme non pris en charge est sélectionné
-        return jsonify({"erreur": "Algorithme non pris en charge"}), 400
 
 
-    def best_fit_heuristic(objets, capacite_bin):
+def best_fit_heuristic(objets, capacite_bin):
     # Tri des objets par ordre décroissant de taille
-      objets_tries = sorted(objets, reverse=True)
+    objets_tries = sorted(objets, reverse=True)
+
+    if not objets_tries:
+        return []
 
     # Initialisation des bins avec le premier objet
-      bins = [[objets_tries[0]]]
+    bins = [[objets_tries[0]]]
 
     # Placement des objets restants
     for objet in objets_tries[1:]:
@@ -76,6 +36,7 @@ def run_algorithm(algorithme):
             bins.append([objet])
 
     return bins
+
 def initialiser_population(taille_population, objets, capacite_bin):
     population = []
 
@@ -97,9 +58,12 @@ def selection_par_roulette(population, fitness_values):
 
 
 def croisement(parent1, parent2):
-    point_crossover = random.randint(1, len(parent1) - 1)
-    enfant = parent1[:point_crossover] + [objet for objet in parent2 if objet not in parent1[:point_crossover]]
-    return enfant
+    if len(parent1) > 1:
+        point_crossover = random.randint(1, len(parent1) - 1)
+        enfant = parent1[:point_crossover] + [objet for objet in parent2 if objet not in parent1[:point_crossover]]
+        return enfant
+    else:
+        return parent1  # Si la longueur est inférieure à 2, on ne peut pas effectuer le croisement
 
 
 def mutation(individu, taux_mutation):
@@ -112,6 +76,9 @@ def mutation(individu, taux_mutation):
 
 def algorithme_genetique(objets, capacite_bin, taille_population, taux_mutation, nombre_generations):
     population = initialiser_population(taille_population, objets, capacite_bin)
+
+    meilleure_solution = None
+    nombre_boites_utilisees = 0
 
     for generation in range(nombre_generations):
         fitness_values = [fitness(individu, capacite_bin) for individu in population]
@@ -131,15 +98,22 @@ def algorithme_genetique(objets, capacite_bin, taille_population, taux_mutation,
 
         population = nouvelle_population
 
-    meilleure_solution = max(population, key=lambda individu: fitness(individu, capacite_bin))
-    nombre_boites_utilisees = 1 / fitness(meilleure_solution, capacite_bin) - 1
+        if population:
+            meilleure_solution = max(population, key=lambda individu: fitness(individu, capacite_bin))
+            nombre_boites_utilisees = 1 / fitness(meilleure_solution, capacite_bin) - 1
+            # Faites quelque chose avec la meilleure solution et le nombre de boîtes utilisées
+        else:
+            # Gérez le cas où la population est vide
+            print("La population est vide.")
 
     return meilleure_solution, nombre_boites_utilisees
 
 
 
 
-    def initialiser_loups(nombre_loups, dimension, capacite_maximale):
+
+
+def initialiser_loups(nombre_loups, dimension, capacite_maximale):
      return np.random.randint(0, capacite_maximale + 1, (nombre_loups, dimension))
 
 
@@ -182,7 +156,14 @@ def mise_a_jour_position(loup_alpha, loup_beta, loup_delta, a, A, C ,capacite_ma
 
 def algorithme_loups(objets, capacite_bin, nombre_loups, nombre_iterations):
     dimension = len(objets)
-    loups = initialiser_loups(nombre_loups, dimension,capacite_bin)
+    loups = initialiser_loups(nombre_loups, dimension, capacite_bin)
+
+    if loups.size == 0:
+        # Gérer le cas où la liste de loups est vide
+        return [], float('inf')  # Retourner une valeur par défaut
+
+    meilleur_loup = loups[0]  # Initialiser avec le premier loup
+    meilleur_fitness = fitness_loup(meilleur_loup, objets, capacite_bin)
 
     for iteration in range(nombre_iterations):
         for i in range(nombre_loups):
@@ -195,9 +176,94 @@ def algorithme_loups(objets, capacite_bin, nombre_loups, nombre_iterations):
             loups[i] = nouvelle_position
 
         meilleur_loup = min(loups, key=lambda x: fitness_loup(x, objets, capacite_bin))
-        meilleur_fitness = fitness_loup(meilleur_loup, objets, capacite_bin)
+        meilleur_fitness = fitness_loup(meilleur_loup, objets, capacite_bin)[1]
 
     return meilleur_loup, meilleur_fitness
+
+
+
+    # Votre route principale
+@app.route('/')
+def home():
+    return render_template('accueil.html')
+
+@app.route('/index.html')
+def index():
+    # Ajoutez ici le code pour préparer les données nécessaires à la page index.html
+    return render_template('index.html')
+    
+
+    # Route pour lancer l'algorithme
+# Route pour lancer l'algorithme
+@app.route('/run-algorithm/<algorithme>', methods=['POST'])  # Utiliser POST au lieu de GET
+def run_algorithm(algorithme):
+    # Récupérer les paramètres depuis la requête
+    try:
+      data = request.get_json()  # Obtenir les données depuis le corps de la requête
+      print(f'Données reçues du client : {data}')
+
+      capacite_bin = int(data.get('capaciteBin', 0))
+      dimensions_objets = data.get('dimensionsObjets', [])
+      print(f'Données reçues du client : {capacite_bin,dimensions_objets}')
+      
+
+      if algorithme == 'genetique':
+        # Ajouter les paramètres spécifiques à l'algorithme génétique
+        taille_population = int(data.get('parametres', {}).get('taillePopulation', 0))
+        nbr_generations = int(data.get('parametres', {}).get('nbrGenerations', 0))
+        taux_mutation = float(data.get('parametres', {}).get('tauxMutation', 0.0))
+
+
+        parametres = {
+            'capacite_bin': capacite_bin,
+            'dimensions_objets': dimensions_objets,
+            'taille_population': taille_population,
+            'nbr_generations': nbr_generations,
+            'taux_mutation': taux_mutation
+                    }
+
+        print(f'Parametres de l algo : {parametres}')
+        # Appeler l'algorithme génétique avec les paramètres
+        meilleure_solution_genetique, nombre_boites_utilisees_genetique = algorithme_genetique(dimensions_objets, capacite_bin, parametres['taille_population'], parametres['taux_mutation'], parametres['nbr_generations'])
+        print("Résultats de l'algorithme :", meilleure_solution_genetique, nombre_boites_utilisees_genetique)
+        try:
+          return jsonify({"solution": meilleure_solution_genetique, "nombre_boites_utilisees": nombre_boites_utilisees_genetique})
+        except Exception as e:
+          print("Erreur lors de la conversion en JSON : {e}")
+          return jsonify({"erreur": "Erreur lors de la conversion en JSON"}), 500
+
+      elif algorithme == 'loupsgris':
+        # Ajouter les paramètres spécifiques à l'algorithme des loups gris
+        nombre_loups = int(data.get('parametres', {}).get('nbrLoups', 0))
+        nombre_iterations = int(data.get('parametres', {}).get('nbrIterations', 0))
+
+        parametres = {
+        'capacite_bin': capacite_bin,
+        'dimensions_objets': dimensions_objets,
+        'nombre_loups': nombre_loups,
+        'nombre_iterations': nombre_iterations,
+                    }
+
+        print(f'Parametres de l algo : {parametres}')
+        # Appeler l'algorithme des loups gris avec les paramètres
+        meilleure_solution_loups, nombre_boites_utilisees_loups = algorithme_loups(dimensions_objets, capacite_bin, parametres['nombre_loups'], parametres['nombre_iterations'])
+        print("Résultats de l'algorithme :", meilleure_solution_loups, nombre_boites_utilisees_loups)
+        try:
+           return jsonify({
+                        "solution": meilleure_solution_loups.tolist(),
+                        "nombre_boites_utilisees": nombre_boites_utilisees_loups
+                        })
+
+        except Exception as e:
+            print(f"Erreur lors de la conversion en JSON : {e}")
+            return jsonify({"erreur": "Erreur lors de la conversion en JSON"}), 500
+      else:
+        # Gérer le cas où un algorithme non pris en charge est sélectionné
+        return jsonify({"erreur": "Algorithme non pris en charge"}), 400
+
+    except Exception as e:
+        print(f'Erreur dans la fonction run_algorithm : {e}')
+        return jsonify({"erreur": "Une erreur est survenue lors de l'exécution de l'algorithme"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)

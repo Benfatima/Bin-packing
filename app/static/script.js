@@ -34,54 +34,75 @@ document.addEventListener('DOMContentLoaded', function () {
     const commencerBtn = document.getElementById('commencerBtn');
     commencerBtn.addEventListener('click', function () {
         // Récupérer les valeurs des champs
-        const nombreObjets = document.getElementById('nbr_objets').value;
-        const capaciteBin = document.getElementById('capacité-bin').value;
-        const dimensionsObjets = document.getElementById('dimensions').value;
-
+        const capaciteBin = parseInt(document.getElementById('capacité-bin').value);
+        const dimensionsObjets = JSON.parse(document.getElementById('dimensions').value).map(Number);
 
         // Récupérer la valeur de l'algorithme sélectionné
         const algorithmeSelectionne = document.querySelector('input[name="algorithme"]:checked').id;
         let parametres = {};
+
         if (algorithmeSelectionne === 'genetique') {
-            parametres.taillePopulation = document.getElementById('Taille population').value;
-            parametres.nbrGenerations = document.getElementById('Nombres générations').value;
-            parametres.tauxMutation = document.getElementById('Taux mutation').value;
+            parametres.taillePopulation = parseInt(document.getElementById('Taille population').value);
+            parametres.nbrGenerations = parseInt(document.getElementById('Nombres générations').value);
+            parametres.tauxMutation = parseFloat(document.getElementById('Taux mutation').value);
+            console.log("Données envoyées au serveur :", parametres);
+            console.log("Données envoyées au serveur :", dimensionsObjets);
+
         } else if (algorithmeSelectionne === 'loupsgris') {
-            parametres.nbrLoups = document.getElementById('Nombres loups').value;
-            parametres.nbrIterations = document.getElementById('Nombres itérations').value;
-        }
-        else {
+            parametres.nbrLoups = parseInt(document.getElementById('Nombres loups').value);
+            parametres.nbrIterations = parseInt(document.getElementById('Nombres itérations').value);
+            console.log("Données envoyées au serveur :", parametres);
+            
+
+        } else {
             console.error('Algorithme non pris en charge.');
             return;
         }
 
-        fetch(`/run-algorithm/${algorithmeId}?nombreObjets=${nombreObjets}&capaciteBin=${capaciteBin}&dimensionsObjets=${dimensionsObjets}`, {
-            method: 'POST', // ou 'GET' selon vos besoins
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(parametres),
+        fetch(`/run-algorithm/${algorithmeSelectionne}`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        capaciteBin: capaciteBin,
+        dimensionsObjets: dimensionsObjets,
+        parametres
+    }),
+})
+
+        .then(response => response.json())
+        .then(resultat => {
+            // Vérifier si resultat.solution existe et est un tableau
+            if (resultat.solution && Array.isArray(resultat.solution)) {
+                // Afficher les résultats dans votre structure HTML
+                const nbrElement = document.querySelector('.nbr-bin span');
+                const affichage1Element = document.querySelector('.affichage1');
+        
+                // Afficher le nombre de boîtes utilisées dans le premier bloc
+                nbrElement.textContent = `Nombre de bacs : ${resultat.nombre_boites_utilisees}`;
+        
+                // Vous devrez personnaliser cette partie selon le format de vos résultats
+                // Par exemple, si resultat.solution contient un tableau de boîtes, vous pouvez le parcourir et l'afficher.
+                resultat.solution.forEach((boite, index) => {
+                    const boiteDiv = document.createElement('div');
+                    boiteDiv.textContent = `Boîte ${index + 1}: [${boite.map(objet => objet[0]).join(', ')}]`;
+                    affichage1Element.appendChild(boiteDiv);
+                });
+        
+                // Afficher la disposition des objets dans le deuxième bloc
+                const dispositionElement = document.querySelector('.disposition .affichage1 span');
+                dispositionElement.textContent = `Liste des bins : \n${JSON.stringify(resultat.solution)}`;
+        
+                console.log(`Résultats de l'algorithme ${algorithmeSelectionne}:`, resultat);
+            } else {
+                console.error('Erreur lors de la récupération des résultats de l\'algorithme. La solution n\'est pas un tableau.');
+            }
         })
-    .then(response => response.json())
-    .then(resultat => {
-        // Afficher les résultats dans votre structure HTML
-        const nbrElement = document.querySelector('.nbr span');
-        const affichage1Element = document.querySelector('.affichage1');
-
-        nbrElement.textContent = resultat.nombre_boites_utilisees;
-
-        // Vous devrez personnaliser cette partie selon le format de vos résultats
-        // Par exemple, si resultat.solution contient un tableau de boîtes, vous pouvez le parcourir et l'afficher.
-        resultat.solution.forEach((boite, index) => {
-            const boiteDiv = document.createElement('div');
-            boiteDiv.textContent = `Boîte ${index + 1}: ${boite.join(', ')}`;
-            affichage1Element.appendChild(boiteDiv);
-        });
-
-        console.log(`Résultats de l'algorithme ${algorithmeSelectionne}:`, resultat);
-    })
-    .catch(error => console.error('Erreur lors de l\'appel API:', error));
+        .catch(error => console.error('Erreur lors de l\'appel API:', error));
+        
     });
-
-    // Autres fonctions, le cas échéant 
 });
+
+
+            
